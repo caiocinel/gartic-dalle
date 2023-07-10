@@ -1,5 +1,4 @@
 from selenium import webdriver
-import pyautogui
 from selenium.webdriver.common.by import By
 from time import sleep
 from env import OPENAI_API_KEY
@@ -7,7 +6,6 @@ import openai
 from PIL import Image
 from io import BytesIO
 import requests
-import keyboard
 from datetime import datetime
 
 openai.api_key = "API KEY here" #OPENAI_API_KEY
@@ -16,16 +14,6 @@ browser = webdriver.Chrome()
 browser.get("https://gartic.com.br/")
 
 alreadyDrawed: list[dict[str, str]] = []
-
-def get_initial_win_size() -> tuple[int, int]:
-    frame_grid = browser.find_element(By.CSS_SELECTOR ,'#telaCanvas > canvas:nth-child(2)')
-    browser_location = browser.get_window_position() 
-    x = browser_location['x'] + 17 + 2
-    y = browser_location['y'] + 73 + 25 + 10
-    print(f"Element Position: {frame_grid.location}")
-    print(f"Browser Position: {browser_location}")
-    return (frame_grid.location['x'] + x, frame_grid.location['y'] + y)
-    
 
 while True:
     if browser.find_elements(By.CSS_SELECTOR, ".btPular").__len__() == 0:
@@ -54,11 +42,11 @@ while True:
     if not any(d["word"] == value for d in alreadyDrawed):
         print("Fetching image...")
 
-        # response = openai.Image.create(
-        #     prompt=f"{value}, hand's drawed",
-        #     n=1,
-        #     size="256x256",
-        # )
+        response = openai.Image.create(
+            prompt=f"{value}, hand's drawed",
+            n=1,
+            size="256x256",
+        )
 
         alreadyDrawed.append(
             {
@@ -79,8 +67,10 @@ while True:
     drawElement = browser.find_element(By.CSS_SELECTOR ,"#telaCanvas > canvas:nth-child(2)")    
     action = webdriver.ActionChains(driver=browser, duration=0)
     
-    winPos = get_initial_win_size()
+    browser.execute_cdp_cmd('Network.setBlockedURLs', {"urls": ["gartic.com.br/room/atualizar.php"]})
+    browser.execute_cdp_cmd('Network.enable', {})
 
+    
     for x in range(img.width):
         for y in range(img.height):
             pixel = img.load()[x, y]
@@ -88,14 +78,17 @@ while True:
             if (pixel[0] > 250 and pixel[1] > 250 and pixel[2] > 250):
                 continue
 
-            pyautogui.click(x=(winPos[0] + x), y=(winPos[1] + y), _pause=False)
+            browser.execute_script(f"arguments[0].setAttribute('codigo', '{'%02x%02x%02x' % (pixel[0], pixel[1], pixel[2])}'); arguments[0].dispatchEvent(new Event('click'))", browser.find_element(By.CSS_SELECTOR, "#cores > div:nth-child(1)"))
+            action.move_to_element(drawElement)
+            action.move_by_offset((-drawElement.size['width']/2 + 10) + x , (-drawElement.size['height']/2 + 10) + y)
+            action.click()
+            action.perform()
+            print(f"{datetime.now().time()}")
 
+    browser.execute_cdp_cmd('Network.setBlockedURLs', {"urls": [""]})
+    browser.execute_cdp_cmd('Network.disable', {})
    
-    try:
-        while browser.find_element(By.CSS_SELECTOR, ".btPular").is_displayed():
-            sleep(1)
-    except:
-        pass
+    while browser.find_element(By.CSS_SELECTOR, ".btPular").is_displayed():
+        sleep(1)
 
     print("Ended drawing...")
-
